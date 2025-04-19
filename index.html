@@ -1,0 +1,525 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Memory Card Game</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    /* Animated underwater background */
+    body {
+      margin: 0;
+      padding: 20px;
+      min-height: 100vh;
+      font-family: Arial, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      background: linear-gradient(
+        45deg,
+        #006994,
+        #0099cc,
+        #003366,
+        #006994,
+        #00507a
+      );
+      background-size: 400% 400%;
+      animation: underwaterGradient 15s ease infinite;
+      position: relative;
+      overflow: hidden;
+    }
+
+    /* Add bubbles effect */
+    body::before {
+      content: '';
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: radial-gradient(
+        circle at center,
+        rgba(255, 255, 255, 0.1) 0%,
+        rgba(255, 255, 255, 0.05) 25%,
+        transparent 70%
+      );
+      animation: bubbles 8s ease-in-out infinite;
+      pointer-events: none;
+    }
+
+    body::after {
+      content: '';
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: url('data:image/svg+xml,<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><circle cx="50" cy="50" r="1" fill="rgba(255,255,255,0.2)"/></svg>');
+      background-size: 50px 50px;
+      animation: floatingBubbles 10s linear infinite;
+      opacity: 0.5;
+      pointer-events: none;
+    }
+
+    @keyframes underwaterGradient {
+      0% {
+        background-position: 0% 50%;
+      }
+      50% {
+        background-position: 100% 50%;
+      }
+      100% {
+        background-position: 0% 50%;
+      }
+    }
+
+    @keyframes bubbles {
+      0%, 100% {
+        transform: translateY(0) scale(1);
+      }
+      50% {
+        transform: translateY(-20px) scale(1.1);
+      }
+    }
+
+    @keyframes floatingBubbles {
+      from {
+        transform: translateY(100%) rotate(0deg);
+      }
+      to {
+        transform: translateY(-100%) rotate(360deg);
+      }
+    }
+
+    /* Update game container to be more visible on the animated background */
+    .game-container {
+      width: 100%;
+      max-width: 900px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      backdrop-filter: blur(5px);
+      padding: 20px;
+      border-radius: 15px;
+      background: rgba(255, 255, 255, 0.1);
+      box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
+    }
+    
+    .game-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 15px 20px;
+      background: rgba(255, 255, 255, 0.9);
+      backdrop-filter: blur(4px);
+      border-radius: 8px;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    }
+    
+    .score-display {
+      font-size: 18px;
+      font-weight: bold;
+    }
+    
+    .reset-button {
+      padding: 8px 16px;
+      background-color: #006994;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 16px;
+      transition: background-color 0.3s, transform 0.2s;
+    }
+    
+    .reset-button:hover {
+      background-color: #004c6d;
+      transform: scale(1.05);
+    }
+    
+    .game-board {
+      width: 100%;
+      height: 600px;
+      background: rgba(255, 255, 255, 0.9);
+      backdrop-filter: blur(4px);
+      border-radius: 8px;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+      overflow: hidden;
+    }
+    
+    .game-complete {
+      padding: 15px;
+      background: rgba(230, 247, 217, 0.9);
+      backdrop-filter: blur(4px);
+      color: #2e7d32;
+      text-align: center;
+      border-radius: 8px;
+      font-size: 18px;
+      font-weight: bold;
+      display: none;
+    }
+    
+    @media (max-width: 768px) {
+      .game-board {
+        height: 400px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <!-- Add audio elements right after the body tag -->
+  <audio id="flipSound" preload="auto">
+    <source src="./flip.mp3" type="audio/mpeg">
+  </audio>
+  <audio id="matchSound" preload="auto">
+    <source src="./match.mp3" type="audio/mpeg">
+  </audio>
+
+  <div class="game-container">
+    <div class="game-header">
+      <div class="score-display">Score: <span id="score">0</span></div>
+      <div class="score-display">Attempts: <span id="attempts">0</span></div>
+      <button class="reset-button" id="reset-button">Reset Game</button>
+    </div>
+    
+    <div class="game-complete" id="game-complete">
+      Congratulations! You've completed the game!
+    </div>
+    
+    <div class="game-board" id="game-board"></div>
+  </div>
+
+  <script>
+    // Add sound elements to the top of your script
+    const flipSound = document.getElementById('flipSound');
+    const matchSound = document.getElementById('matchSound');
+
+    // Add sound playing functions
+    function playFlipSound() {
+      flipSound.currentTime = 0;
+      flipSound.play().catch(error => console.log('Sound play failed:', error));
+    }
+
+    function playMatchSound() {
+      matchSound.currentTime = 0;
+      matchSound.play().catch(error => console.log('Sound play failed:', error));
+    }
+
+    // Game state
+    const gameState = {
+      score: 0,
+      attempts: 0,
+      flippedCards: [],
+      canFlip: true,
+      matchedPairs: new Set(),
+      cards: []
+    };
+
+    // DOM elements
+    const scoreElement = document.getElementById('score');
+    const attemptsElement = document.getElementById('attempts');
+    const resetButton = document.getElementById('reset-button');
+    const gameCompleteElement = document.getElementById('game-complete');
+    const gameBoard = document.getElementById('game-board');
+
+    // Three.js variables
+    let scene, camera, renderer, raycaster, mouse;
+    
+    // Example image URLs - replace with your own
+    const imagePool = [
+        "img/img-1.webp",
+        "img/img-2.jpg",
+        "img/img-3.jpg",
+        "img/img-4.jpg",
+        "img/img-5.webp",
+        "img/img-6.jpg",
+        "img/img-7.jpg",
+        "img/img-8.jpg",
+        "img/img-9.jpg",
+        "img/img-10.jpg",
+        "img/img-12.jpg",
+        "img/img-11.jpg",
+    ];
+    // Initialize the game
+    function init() {
+      // Set up Three.js scene
+      scene = new THREE.Scene();
+      scene.background = new THREE.Color(0x006994); // Matching underwater blue
+      
+      // Set up camera
+      const aspect = gameBoard.clientWidth / gameBoard.clientHeight;
+      camera = new THREE.PerspectiveCamera(50, aspect, 0.1, 1000);
+      camera.position.z = 12; // Increased from 8 to 12 to accommodate larger cards
+      
+      // Set up renderer
+      renderer = new THREE.WebGLRenderer({ antialias: true });
+      renderer.setPixelRatio(window.devicePixelRatio);
+      renderer.setSize(gameBoard.clientWidth, gameBoard.clientHeight);
+      
+      // Clear any existing canvas
+      while (gameBoard.firstChild) {
+        gameBoard.removeChild(gameBoard.firstChild);
+      }
+      
+      gameBoard.appendChild(renderer.domElement);
+      
+      // Set up raycaster for card clicking
+      raycaster = new THREE.Raycaster();
+      mouse = new THREE.Vector2();
+      
+      // Create the game cards
+      createCards();
+      
+      // Add event listeners
+      renderer.domElement.addEventListener('click', onCardClick);
+      resetButton.addEventListener('click', resetGame);
+      window.addEventListener('resize', onWindowResize);
+      
+      // Start animation loop
+      animate();
+    }
+
+    // Create a card with the provided image URL
+    function createCard(id, imageUrl, position) {
+      // Front material (blue card back)
+      const frontMaterial = new THREE.MeshBasicMaterial({ 
+        color: 0x2196f3,
+        side: THREE.DoubleSide
+      });
+      
+      // Back material (image)
+      const textureLoader = new THREE.TextureLoader();
+      const texture = textureLoader.load(imageUrl);
+      texture.colorSpace = THREE.SRGBColorSpace;
+      
+      const backMaterial = new THREE.MeshBasicMaterial({ 
+        map: texture,
+        side: THREE.DoubleSide
+      });
+      
+      // Card dimensions - increased by 50%
+      const width = 1.35;  // Original 0.9 * 1.5
+      const height = 1.35; // Original 0.9 * 1.5
+      
+      // Create geometry
+      const geometry = new THREE.PlaneGeometry(width, height);
+      
+      // Create front and back planes
+      const frontPlane = new THREE.Mesh(geometry, frontMaterial);
+      const backPlane = new THREE.Mesh(geometry, backMaterial);
+      backPlane.position.z = -0.01;
+      backPlane.rotation.y = Math.PI;
+      
+      // Create card group
+      const card = new THREE.Group();
+      card.add(frontPlane);
+      card.add(backPlane);
+      
+      // Position the card
+      card.position.copy(position);
+      
+      // Add custom properties
+      card.userData = {
+        id,
+        imageUrl,
+        isFlipped: false,
+        isMatched: false,
+        targetRotation: 0
+      };
+      
+      return card;
+    }
+
+    // Create all cards for the game
+    function createCards() {
+      // Clear existing cards
+      gameState.cards.forEach(card => scene.remove(card));
+      gameState.cards = [];
+      
+      // Prepare pairs of images
+      let cardImages = [];
+      imagePool.forEach(image => {
+        cardImages.push(image, image); // Add each image twice
+      });
+      
+      // If we need more than available pairs (5x5=25 cards)
+      while (cardImages.length < 25) {
+        const randomImage = imagePool[Math.floor(Math.random() * imagePool.length)];
+        cardImages.push(randomImage, randomImage);
+      }
+      
+      // Trim to exactly 25 if needed
+      if (cardImages.length > 25) {
+        cardImages = cardImages.slice(0, 25);
+      }
+      
+      // Shuffle the array
+      for (let i = cardImages.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [cardImages[i], cardImages[j]] = [cardImages[j], cardImages[i]];
+      }
+      
+      // Create 5x5 grid of cards
+      const gridSize = 5;
+      const spacing = 1.5; // Increased from 1 to 1.5 to accommodate larger cards
+      const offsetX = (gridSize - 1) * spacing / 2;
+      const offsetY = (gridSize - 1) * spacing / 2;
+      
+      for (let row = 0; row < gridSize; row++) {
+        for (let col = 0; col < gridSize; col++) {
+          const index = row * gridSize + col;
+          const x = col * spacing - offsetX;
+          const y = -(row * spacing - offsetY); // Negative for correct orientation
+          
+          const position = new THREE.Vector3(x, y, 0);
+          const card = createCard(index, cardImages[index], position);
+          
+          gameState.cards.push(card);
+          scene.add(card);
+        }
+      }
+    }
+
+    // Handle card click
+    function onCardClick(event) {
+      if (!gameState.canFlip) return;
+      
+      // Calculate mouse position in normalized device coordinates
+      const rect = renderer.domElement.getBoundingClientRect();
+      mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+      mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+      
+      // Update the picking ray with the camera and mouse position
+      raycaster.setFromCamera(mouse, camera);
+      
+      // Find objects intersecting with the ray
+      const intersects = raycaster.intersectObjects(scene.children, true);
+      
+      if (intersects.length > 0) {
+        // Find the parent card
+        let cardObject = intersects[0].object;
+        while (cardObject && !cardObject.userData.hasOwnProperty('id')) {
+          cardObject = cardObject.parent;
+        }
+        
+        if (cardObject && cardObject.userData.hasOwnProperty('id')) {
+          handleCardClick(cardObject.userData.id);
+        }
+      }
+    }
+
+    // Handle card click logic
+    function handleCardClick(cardIndex) {
+      const card = gameState.cards[cardIndex];
+      if (!card || card.userData.isMatched || card.userData.isFlipped) return;
+      
+      flipCard(cardIndex);
+      
+      gameState.flippedCards.push(cardIndex);
+      
+      if (gameState.flippedCards.length === 2) {
+        gameState.canFlip = false;
+        
+        gameState.attempts++;
+        attemptsElement.textContent = gameState.attempts;
+        
+        const firstCard = gameState.cards[gameState.flippedCards[0]];
+        const secondCard = gameState.cards[gameState.flippedCards[1]];
+        
+        if (firstCard.userData.imageUrl === secondCard.userData.imageUrl) {
+          // Play match sound BEFORE setting the match state
+          playMatchSound();
+          
+          // Mark as matched
+          firstCard.userData.isMatched = true;
+          secondCard.userData.isMatched = true;
+          gameState.matchedPairs.add(firstCard.userData.imageUrl);
+          
+          // Update score
+          gameState.score++;
+          scoreElement.textContent = gameState.score;
+          
+          // Check if game is completed
+          if (gameState.matchedPairs.size >= Math.floor(25/2)) {
+            gameCompleteElement.style.display = 'block';
+            gameCompleteElement.textContent = `Congratulations! You've completed the game in ${gameState.attempts} attempts!`;
+          }
+          
+          // Reset for next turn
+          gameState.flippedCards = [];
+          gameState.canFlip = true;
+        } else {
+          // No match, flip back after delay
+          setTimeout(() => {
+            flipCard(gameState.flippedCards[0]);
+            flipCard(gameState.flippedCards[1]);
+            gameState.flippedCards = [];
+            gameState.canFlip = true;
+          }, 1000);
+        }
+      }
+    }
+
+    // Flip card animation
+    function flipCard(cardIndex) {
+      const card = gameState.cards[cardIndex];
+      if (!card) return;
+      
+      card.userData.isFlipped = !card.userData.isFlipped;
+      card.userData.targetRotation = card.userData.isFlipped ? Math.PI : 0;
+      
+      // Play flip sound
+      playFlipSound();
+    }
+
+    // Animation loop
+    function animate() {
+      requestAnimationFrame(animate);
+      
+      // Update card rotations
+      gameState.cards.forEach(card => {
+        if (card) {
+          // Smooth rotation
+          card.rotation.y += (card.userData.targetRotation - card.rotation.y) * 0.15;
+        }
+      });
+      
+      renderer.render(scene, camera);
+    }
+
+    // Handle window resize
+    function onWindowResize() {
+      camera.aspect = gameBoard.clientWidth / gameBoard.clientHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(gameBoard.clientWidth, gameBoard.clientHeight);
+    }
+
+    // Reset game function
+    function resetGame() {
+      // Reset state
+      gameState.score = 0;
+      gameState.attempts = 0;
+      gameState.flippedCards = [];
+      gameState.matchedPairs = new Set();
+      gameState.canFlip = true;
+      
+      // Reset UI
+      scoreElement.textContent = '0';
+      attemptsElement.textContent = '0';
+      gameCompleteElement.style.display = 'none';
+      
+      // Create new cards
+      createCards();
+    }
+
+    // Initialize the game when the window loads
+    window.onload = init;
+  </script>
+</body>
+</html>
