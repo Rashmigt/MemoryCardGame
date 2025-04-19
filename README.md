@@ -2,6 +2,7 @@
 
 A simple, visually engaging memory matching game built using HTML, CSS, JavaScript, and the Three.js library. Players interact with a 3D grid of cards, attempting to find all the matching pairs against an animated underwater background.
 
+[live demo](https://memory-card-game-3js.netlify.app/)
 ## Features
 
 * **3D Card Rendering:** Uses Three.js to display cards as 3D planes in a grid layout.
